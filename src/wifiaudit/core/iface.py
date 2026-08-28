@@ -7,6 +7,8 @@ Kept tiny and behind a context manager so the wizard can set up monitor mode and
 
 from __future__ import annotations
 
+import glob
+import re
 import shutil
 import subprocess
 from contextlib import contextmanager
@@ -14,9 +16,39 @@ from typing import Iterator
 
 from wifiaudit.core.errors import BackendError
 
+_IW_INTERFACE_RE = re.compile(r"^\s*Interface\s+(\S+)", re.MULTILINE)
+
 
 def _run(cmd: list[str], *, check: bool) -> None:
     subprocess.run(cmd, check=check, capture_output=True, text=True)
+
+
+def _parse_iw_dev(text: str) -> list[str]:
+    """Extract interface names from ``iw dev`` output (pure, for testing)."""
+    return _IW_INTERFACE_RE.findall(text)
+
+
+def list_wireless_interfaces() -> list[str]:
+    """Best-effort list of wireless interface names on this host (Linux).
+
+    Prefers ``iw dev``; falls back to ``/sys/class/net/*/wireless``. Returns an
+    empty list when nothing is found or the tools are unavailable (e.g. Windows),
+    so callers can fall back to asking the user to type a name.
+    """
+    names: list[str] = []
+    iw = shutil.which("iw")
+    if iw:
+        try:
+            out = subprocess.run(
+                [iw, "dev"], capture_output=True, text=True, timeout=5, check=False
+            )
+            names = _parse_iw_dev(out.stdout)
+        except (OSError, subprocess.SubprocessError):
+            names = []
+    if not names:
+        for path in glob.glob("/sys/class/net/*/wireless"):
+            names.append(path.split("/")[-2])
+    return sorted(dict.fromkeys(names))
 
 
 @contextmanager
@@ -52,4 +84,4 @@ def monitor_mode(iface: str) -> Iterator[str]:
         _run([ip, "link", "set", iface, "up"], check=False)
 
 
-__all__ = ["monitor_mode"]
+__all__ = ["monitor_mode", "list_wireless_interfaces"]

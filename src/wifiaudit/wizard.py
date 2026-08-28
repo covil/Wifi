@@ -22,7 +22,7 @@ from wifiaudit.capture.capturer import Capturer
 from wifiaudit.capture.models import CaptureResult, CaptureTarget
 from wifiaudit.core.config import Config, load_config
 from wifiaudit.core.errors import ConfigError, WifiAuditError
-from wifiaudit.core.iface import monitor_mode
+from wifiaudit.core.iface import list_wireless_interfaces, monitor_mode
 from wifiaudit.crack.cracker import Cracker
 from wifiaudit.crack.models import CrackResult
 from wifiaudit.discovery.backends import FileBackend, IwScanBackend
@@ -344,12 +344,19 @@ def _menu_offline_demo(console: Console, config_path: Path, now, fixtures: Path)
     )
 
 
-def _menu_live(console: Console, config_path: Path, now) -> None:
+def _menu_live(console: Console, config_path: Path, now, iface_lister=list_wireless_interfaces) -> None:
     if not config_path.is_file():
         console.say("\nNo config yet — choose 'Set up' first (option 1).")
         return
     config = load_config(config_path)
-    iface = console.ask("Wireless interface", config.discovery.default_iface)
+
+    ifaces = iface_lister()
+    if ifaces:
+        idx = console.choose("\nSelect the wireless interface:", ifaces)
+        iface = ifaces[idx]
+    else:
+        console.say("(could not auto-detect a wireless interface)")
+        iface = console.ask("Wireless interface", config.discovery.default_iface)
     wl = config.crack.wordlist or console.ask("Path to a wordlist file")
     deauth = False
     if config.capture.allow_deauth:
@@ -382,7 +389,14 @@ def _menu_verify(console: Console, config_path: Path) -> None:
         )
 
 
-def run_menu(console: Console, *, config_path: Path, now=None, fixtures: Path | None = None) -> int:
+def run_menu(
+    console: Console,
+    *,
+    config_path: Path,
+    now=None,
+    fixtures: Path | None = None,
+    iface_lister=list_wireless_interfaces,
+) -> int:
     """Interactive top-level menu. Loops until the user chooses Quit."""
     fixtures = fixtures or _fixtures_dir()
     options = [
@@ -402,7 +416,7 @@ def run_menu(console: Console, *, config_path: Path, now=None, fixtures: Path | 
             elif choice == 1:
                 _menu_offline_demo(console, config_path, now, fixtures)
             elif choice == 2:
-                _menu_live(console, config_path, now)
+                _menu_live(console, config_path, now, iface_lister=iface_lister)
             elif choice == 3:
                 _menu_verify(console, config_path)
             else:

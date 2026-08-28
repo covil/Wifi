@@ -156,13 +156,45 @@ def test_menu_verify_with_config_loads_it(tmp_path, fixtures_dir):
     assert "Audit log" in console.text
 
 
-def test_menu_live_cancel_exercises_config_load(tmp_path, fixtures_dir):
-    # choose 3 (live), provide iface + wordlist, then decline "Continue?" so no
-    # hardware is touched. This path loads the config — the regression that
-    # `load_config` was not imported would fail here.
+def test_menu_live_cancel_typed_iface_when_none_detected(tmp_path, fixtures_dir):
+    # No interfaces detected -> fall back to typing. choose 3, type iface +
+    # wordlist, decline "Continue?". Exercises load_config (regression guard).
     cfg = tmp_path / "config.toml"
     _write_config(cfg)
     console = ScriptedConsole(["3", "wlan0", "some-wordlist.txt", "no", "5"])
-    rc = run_menu(console, config_path=cfg, now=NOW, fixtures=fixtures_dir)
+    rc = run_menu(
+        console, config_path=cfg, now=NOW, fixtures=fixtures_dir, iface_lister=lambda: []
+    )
     assert rc == 0
+    assert "could not auto-detect" in console.text
     assert "Cancelled" in console.text
+
+
+def test_menu_live_picks_detected_interface(tmp_path, fixtures_dir):
+    # Interfaces detected -> user picks from a menu (no typing the name).
+    cfg = tmp_path / "config.toml"
+    _write_config(cfg)
+    # answers: 3 (live), 2 (pick wlan1 from the list), wordlist, decline, quit
+    console = ScriptedConsole(["3", "2", "some-wordlist.txt", "no", "5"])
+    rc = run_menu(
+        console, config_path=cfg, now=NOW, fixtures=fixtures_dir,
+        iface_lister=lambda: ["wlan0", "wlan1"],
+    )
+    assert rc == 0
+    assert "Select the wireless interface" in console.text
+    assert "Cancelled" in console.text
+
+
+def test_parse_iw_dev():
+    from wifiaudit.core.iface import _parse_iw_dev
+
+    sample = (
+        "phy#0\n"
+        "\tInterface wlan0\n"
+        "\t\tifindex 3\n"
+        "\t\ttype managed\n"
+        "phy#1\n"
+        "\tInterface wlan1mon\n"
+        "\t\ttype monitor\n"
+    )
+    assert _parse_iw_dev(sample) == ["wlan0", "wlan1mon"]
