@@ -130,3 +130,28 @@ def build_pcap(frames: list[bytes], *, linktype: int = 127) -> bytes:
         rec = (_radiotap() + f) if linktype == 127 else f
         out += struct.pack("<IIII", 0, 0, len(rec), len(rec)) + rec
     return out
+
+
+def _pad4(b: bytes) -> bytes:
+    pad = (-len(b)) % 4
+    return b + b"\x00" * pad
+
+
+def build_pcapng(frames: list[bytes], *, linktype: int = 127) -> bytes:
+    """Wrap 802.11 frames into little-endian pcapng bytes (as hcxdumptool writes)."""
+    # Section Header Block
+    shb_body = struct.pack("<IHHq", 0x1A2B3C4D, 1, 0, -1)
+    shb = struct.pack("<II", 0x0A0D0D0A, 12 + len(shb_body)) + shb_body
+    shb += struct.pack("<I", 12 + len(shb_body))
+    # Interface Description Block
+    idb_body = struct.pack("<HHI", linktype, 0, 65535)
+    idb = struct.pack("<II", 0x00000001, 12 + len(idb_body)) + idb_body
+    idb += struct.pack("<I", 12 + len(idb_body))
+    out = shb + idb
+    for f in frames:
+        rec = (_radiotap() + f) if linktype == 127 else f
+        payload = _pad4(rec)
+        epb_body = struct.pack("<IIIII", 0, 0, 0, len(rec), len(rec)) + payload
+        total = 12 + len(epb_body)
+        out += struct.pack("<II", 0x00000006, total) + epb_body + struct.pack("<I", total)
+    return out

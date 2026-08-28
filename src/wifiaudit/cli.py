@@ -22,7 +22,7 @@ import sys
 from pathlib import Path
 
 from wifiaudit import __version__
-from wifiaudit.capture.backends import AirodumpBackend, ReplayBackend
+from wifiaudit.capture.backends import ReplayBackend, capture_backend
 from wifiaudit.capture.capturer import Capturer
 from wifiaudit.capture.models import CaptureResult, CaptureTarget
 from wifiaudit.core.audit import verify_chain
@@ -171,10 +171,10 @@ def _cmd_capture(args: argparse.Namespace) -> int:
     target = CaptureTarget(bssid=bssid, essid=args.essid, channel=args.channel)
 
     if args.live:
-        backend = AirodumpBackend(
+        backend = capture_backend(
+            config.capture.tool,
             output_dir=config.capture.output_dir,
-            airodump_path=None,
-            aireplay_path=None,
+            deauth_interval=config.capture.deauth_interval,
         )
     elif args.input:
         backend = ReplayBackend(args.input)

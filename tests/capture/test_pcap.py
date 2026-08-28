@@ -99,3 +99,19 @@ def test_empty_capture_yields_nothing(make_pcap):
 def test_not_a_pcap_raises():
     with pytest.raises(BackendError):
         analyze(b"this is definitely not a pcap file")
+
+
+def test_pcapng_pmkid_is_parsed(make_frame, make_pcapng):
+    # hcxdumptool writes pcapng; a PMKID (M1) must be recovered from it.
+    pmkid = bytes(range(16))
+    data = make_pcapng([make_frame(1, ap=AP, sta=STA, pmkid=pmkid)])
+    (h,) = analyze(data)
+    assert h.pmkid == pmkid.hex()
+    assert h.is_crackable
+
+
+def test_pcapng_full_handshake_is_parsed(make_frame, make_pcapng):
+    data = make_pcapng([make_frame(n, ap=AP, sta=STA) for n in (1, 2, 3, 4)])
+    (h,) = analyze(data)
+    assert h.messages == {1, 2, 3, 4}
+    assert h.is_complete

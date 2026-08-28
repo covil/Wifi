@@ -42,12 +42,20 @@ scan_seconds    = 15
 # Stage 2 (handshake / PMKID capture) settings.
 default_iface  = "wlan0"
 capture_seconds = 60          # how long a --live capture runs
-output_dir     = "captures"   # where live .cap files are written
+output_dir     = "captures"   # where live capture files are written
+# Capture tool:
+#   "airodump-ng" — captures the 4-way handshake (needs a connected client; pair
+#                   with deauth to force one). Writes .cap.
+#   "hcxdumptool" — captures the PMKID directly from the AP, CLIENTLESS (no
+#                   connected device or deauth needed). Writes .pcapng. Best when
+#                   no clients are connected. Requires hcxdumptool installed.
 tool           = "airodump-ng"
 # Deauthentication is an ACTIVE transmission that disrupts clients. It stays off
-# unless you set this true AND pass --deauth. Only enable it when your rules of
-# engagement explicitly permit deauth against in-scope targets.
-allow_deauth   = false
+# unless you set this true AND pass --deauth. When on, deauth is sent in bounded
+# bursts repeatedly across the capture window to improve handshake odds. Only
+# enable it when your rules of engagement explicitly permit it.
+allow_deauth    = false
+deauth_interval = 8           # seconds between repeated deauth bursts
 
 [crack]
 # Stage 3 (offline dictionary attack) settings.

@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from wifiaudit.capture.backends import AirodumpBackend, ReplayBackend
+from wifiaudit.capture.backends import ReplayBackend, capture_backend
 from wifiaudit.capture.capturer import Capturer
 from wifiaudit.capture.models import CaptureResult, CaptureTarget
 from wifiaudit.core.config import Config, load_config
@@ -97,11 +97,16 @@ class Wizard:
         return scanner.run(iface=scan_iface, seconds=None)
 
     def _capture(self, target: CaptureTarget, *, live: bool, capture_input: str | None,
-                 iface: str | None, seconds: int | None, deauth: bool) -> CaptureResult:
+                 iface: str | None, seconds: int | None, deauth: bool,
+                 tool: str | None = None) -> CaptureResult:
         capturer_backend_iface = iface or self.config.discovery.default_iface
         if live:
             with monitor_mode(capturer_backend_iface) as mon:
-                backend = AirodumpBackend(output_dir=self.config.capture.output_dir)
+                backend = capture_backend(
+                    tool or self.config.capture.tool,
+                    output_dir=self.config.capture.output_dir,
+                    deauth_interval=self.config.capture.deauth_interval,
+                )
                 capturer = Capturer.from_config(self.config, backend, now=self.now)
                 return capturer.run(
                     target, iface=mon,
@@ -143,6 +148,7 @@ class Wizard:
         seconds: int | None = None,
         deauth: bool = False,
         do_crack: bool = True,
+        tool: str | None = None,
     ) -> WizardOutcome | None:
         c = self.c
         stages = "3" if do_crack else "2"
@@ -183,7 +189,7 @@ class Wizard:
         target = CaptureTarget(bssid=ap.bssid, essid=ap.essid, channel=ap.channel)
         capture = self._capture(
             target, live=live, capture_input=capture_input,
-            iface=iface, seconds=seconds, deauth=deauth,
+            iface=iface, seconds=seconds, deauth=deauth, tool=tool,
         )
         s = capture.summary()
         c.say(
@@ -404,6 +410,16 @@ def _ask_deauth(console: Console, config) -> bool:
     return False
 
 
+def _choose_capture_method(console: Console) -> str:
+    """Ask handshake (airodump-ng) vs PMKID (hcxdumptool). Returns the tool name."""
+    labels = [
+        "Handshake via airodump-ng  (needs a connected client; can use deauth)",
+        "PMKID via hcxdumptool       (clientless - no client or deauth needed)",
+    ]
+    idx = console.choose("\nHow do you want to capture?", labels)
+    return "airodump-ng" if idx == 0 else "hcxdumptool"
+
+
 def _menu_live(
     console: Console, config_path: Path, now,
     iface_lister=describe_interfaces, wordlist_lister=None,
@@ -414,8 +430,9 @@ def _menu_live(
     config = load_config(config_path)
 
     iface = _choose_interface(console, config, iface_lister)
+    tool = _choose_capture_method(console)
+    deauth = _ask_deauth(console, config) if tool == "airodump-ng" else False
     wl = _choose_wordlist(console, config, wordlist_lister or _default_wordlists)
-    deauth = _ask_deauth(console, config)
     console.say(
         "\nThis will scan and capture on IN-SCOPE targets only. "
         "It needs root (run with sudo) and a monitor-capable adapter."
@@ -424,7 +441,7 @@ def _menu_live(
         console.say("Cancelled.")
         return
     Wizard(config, console, now=now).run(
-        live=True, iface=iface, wordlist=wl, deauth=deauth
+        live=True, iface=iface, wordlist=wl, deauth=deauth, tool=tool
     )
 
 
@@ -437,7 +454,8 @@ def _menu_capture_only(
     config = load_config(config_path)
 
     iface = _choose_interface(console, config, iface_lister)
-    deauth = _ask_deauth(console, config)
+    tool = _choose_capture_method(console)
+    deauth = _ask_deauth(console, config) if tool == "airodump-ng" else False
     console.say(
         "\nThis will capture a handshake/PMKID on IN-SCOPE targets only and then "
         "stop (no cracking). It needs root and a monitor-capable adapter."
@@ -446,7 +464,7 @@ def _menu_capture_only(
         console.say("Cancelled.")
         return
     Wizard(config, console, now=now).run(
-        live=True, iface=iface, deauth=deauth, do_crack=False
+        live=True, iface=iface, deauth=deauth, do_crack=False, tool=tool
     )
 
 

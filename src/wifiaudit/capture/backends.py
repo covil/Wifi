@@ -25,6 +25,10 @@ from wifiaudit.capture.pcap import analyze
 from wifiaudit.core.config import normalize_bssid
 from wifiaudit.core.errors import BackendError
 
+# Deauth burst tuning for the repeating-deauth loop.
+_DEAUTH_BURST = 5        # deauth frames per round (aireplay-ng --deauth N)
+_DEAUTH_MIN_INTERVAL = 3  # seconds; floor between rounds
+
 
 class CaptureBackend(ABC):
     """Produces a :class:`CaptureResult` for one capture pass."""
@@ -92,10 +96,12 @@ class AirodumpBackend(CaptureBackend):
         self,
         *,
         output_dir: str | Path = "captures",
+        deauth_interval: int = 8,
         airodump_path: str | None = None,
         aireplay_path: str | None = None,
     ) -> None:
         self.output_dir = Path(output_dir)
+        self.deauth_interval = max(deauth_interval, _DEAUTH_MIN_INTERVAL)
         self._airodump = airodump_path or shutil.which("airodump-ng")
         self._aireplay = aireplay_path or shutil.which("aireplay-ng")
 
@@ -113,10 +119,11 @@ class AirodumpBackend(CaptureBackend):
         self.output_dir.mkdir(parents=True, exist_ok=True)
         prefix = self.output_dir / f"capture_{normalize_bssid(target.bssid).replace(':', '')}"
         duration = max(seconds or 60, 5)
+        bssid = normalize_bssid(target.bssid)
 
         cmd = [
             self._airodump,
-            "--bssid", normalize_bssid(target.bssid),
+            "--bssid", bssid,
             "-w", str(prefix),
             "--output-format", "pcap",
             "--write-interval", "1",
@@ -128,12 +135,9 @@ class AirodumpBackend(CaptureBackend):
         proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
         try:
             if deauth:
-                # A short, bounded deauth burst to nudge a client into re-handshaking.
-                # Bounded count (never continuous) keeps disruption minimal and auditable.
-                dcmd = [self._aireplay, "--deauth", "5", "-a", normalize_bssid(target.bssid)]
-                dcmd.append(iface)
-                subprocess.run(dcmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
-            proc.wait(timeout=duration)
+                self._repeating_deauth(bssid, iface, duration)
+            else:
+                proc.wait(timeout=duration)
         except subprocess.TimeoutExpired:
             pass  # expected: airodump runs until we stop it
         finally:
@@ -155,6 +159,26 @@ class AirodumpBackend(CaptureBackend):
             iface=iface, seconds=duration, deauth=deauth,
         )
 
+    def _repeating_deauth(self, bssid: str, iface: str, duration: int) -> None:
+        """Send bounded deauth bursts at intervals across the capture window.
+
+        Repeating (rather than a single burst) greatly improves the odds of
+        catching a handshake: it keeps nudging clients to re-associate for the
+        whole window. Each round is a small bounded burst, never a continuous
+        flood, and the loop always ends when the window elapses.
+        """
+        end = time.monotonic() + duration
+        dcmd = [self._aireplay, "--deauth", str(_DEAUTH_BURST), "-a", bssid, iface]
+        while time.monotonic() < end:
+            subprocess.run(
+                dcmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                check=False, timeout=self.deauth_interval,
+            )
+            remaining = end - time.monotonic()
+            if remaining <= 0:
+                break
+            time.sleep(min(self.deauth_interval, remaining))
+
     @staticmethod
     def _newest_cap(prefix: Path) -> Path | None:
         caps = sorted(
@@ -162,6 +186,70 @@ class AirodumpBackend(CaptureBackend):
             key=lambda p: p.stat().st_mtime,
         )
         return caps[-1] if caps else None
+
+
+class HcxDumpToolBackend(CaptureBackend):
+    """Clientless PMKID (and handshake) capture via ``hcxdumptool`` (Linux).
+
+    ``hcxdumptool`` requests the PMKID directly from the AP, so it needs no
+    connected client and no deauth. It writes pcapng, which the same pure parser
+    reads. Assumes ``iface`` is in monitor mode. Live-only; untested off-hardware.
+    """
+
+    name = "hcxdumptool"
+
+    def __init__(
+        self, *, output_dir: str | Path = "captures", hcxdumptool_path: str | None = None
+    ) -> None:
+        self.output_dir = Path(output_dir)
+        self._hcx = hcxdumptool_path or shutil.which("hcxdumptool")
+
+    def capture(self, *, target, iface=None, seconds=None, deauth=False) -> CaptureResult:
+        if not iface:
+            raise BackendError("hcxdumptool backend requires an interface (--iface).")
+        if not self._hcx:
+            raise BackendError(
+                "hcxdumptool backend: 'hcxdumptool' was not found on PATH. "
+                "Install it (Linux), use the airodump tool, or replay with --input."
+            )
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        out = self.output_dir / f"pmkid_{normalize_bssid(target.bssid).replace(':', '')}.pcapng"
+        duration = max(seconds or 60, 5)
+
+        cmd = [self._hcx, "-i", iface, "-w", str(out)]
+        if target.channel is not None:
+            cmd += ["-c", str(target.channel)]
+
+        proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        try:
+            proc.wait(timeout=duration)
+        except subprocess.TimeoutExpired:
+            pass  # hcxdumptool runs until stopped
+        finally:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+
+        if not out.is_file():
+            raise BackendError(
+                f"hcxdumptool backend: no capture file was produced at {out} "
+                "(interface not in monitor mode, or wrong channel?)."
+            )
+        data = out.read_bytes()
+        return _result_from_pcap(
+            data, target, path=str(out), backend=self.name, iface=iface, seconds=duration,
+        )
+
+
+def capture_backend(
+    tool: str, *, output_dir: str | Path = "captures", deauth_interval: int = 8
+) -> CaptureBackend:
+    """Build the live capture backend named by ``tool`` (config ``[capture] tool``)."""
+    if tool in ("hcxdumptool", "hcx"):
+        return HcxDumpToolBackend(output_dir=output_dir)
+    return AirodumpBackend(output_dir=output_dir, deauth_interval=deauth_interval)
 
 
 def get_backend(name: str, **opts) -> CaptureBackend:
@@ -174,10 +262,23 @@ def get_backend(name: str, **opts) -> CaptureBackend:
     if name in ("airodump", "airodump-ng"):
         return AirodumpBackend(
             output_dir=opts.get("output_dir", "captures"),
+            deauth_interval=opts.get("deauth_interval", 8),
             airodump_path=opts.get("airodump_path"),
             aireplay_path=opts.get("aireplay_path"),
+        )
+    if name in ("hcxdumptool", "hcx"):
+        return HcxDumpToolBackend(
+            output_dir=opts.get("output_dir", "captures"),
+            hcxdumptool_path=opts.get("hcxdumptool_path"),
         )
     raise BackendError(f"unknown capture backend: {name!r}")
 
 
-__all__ = ["CaptureBackend", "ReplayBackend", "AirodumpBackend", "get_backend"]
+__all__ = [
+    "CaptureBackend",
+    "ReplayBackend",
+    "AirodumpBackend",
+    "HcxDumpToolBackend",
+    "capture_backend",
+    "get_backend",
+]

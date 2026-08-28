@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from _pcapgen import build_pcap, eapol_frame
+from _pcapgen import build_pcap, build_pcapng, eapol_frame, valid_frames
 
 
 @pytest.fixture
@@ -15,3 +15,13 @@ def make_frame():
 @pytest.fixture
 def make_pcap():
     return build_pcap
+
+
+@pytest.fixture
+def make_pcapng():
+    return build_pcapng
+
+
+@pytest.fixture
+def make_valid():
+    return valid_frames

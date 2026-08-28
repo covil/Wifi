@@ -86,8 +86,20 @@ class EapolFrame:
         return bytes(buf)
 
 
+_PCAPNG_SHB = b"\x0a\x0d\x0d\x0a"
+
+
 def iter_packets(data: bytes) -> Iterator[tuple[int, bytes]]:
-    """Yield ``(linktype, packet_bytes)`` for each record in a classic pcap."""
+    """Yield ``(linktype, packet_bytes)`` for each record in a classic pcap or pcapng.
+
+    Classic pcap (airodump-ng, tcpdump) and pcapng (hcxdumptool) are both handled,
+    dispatched on the file's magic bytes.
+    """
+    if len(data) < 4:
+        raise BackendError("capture: file too short to be a capture")
+    if data[:4] == _PCAPNG_SHB:
+        yield from _iter_pcapng(data)
+        return
     if len(data) < 24:
         raise BackendError("capture: file too short to be a pcap")
     magic = data[:4]
@@ -96,7 +108,7 @@ def iter_packets(data: bytes) -> Iterator[tuple[int, bytes]]:
     elif magic in (b"\xd4\xc3\xb2\xa1", b"\x4d\x3c\xb2\xa1"):
         endian = "<"
     else:
-        raise BackendError("capture: not a pcap file (bad magic); expected a .pcap/.cap")
+        raise BackendError("capture: not a pcap/pcapng file (bad magic).")
     linktype = struct.unpack(endian + "I", data[20:24])[0]
 
     off = 24
@@ -108,6 +120,44 @@ def iter_packets(data: bytes) -> Iterator[tuple[int, bytes]]:
             break  # truncated final record
         yield linktype, data[off : off + incl]
         off += incl
+
+
+def _iter_pcapng(data: bytes) -> Iterator[tuple[int, bytes]]:
+    """Yield ``(linktype, packet_bytes)`` from a pcapng capture (hcxdumptool)."""
+    n = len(data)
+    if n < 12:
+        raise BackendError("capture: truncated pcapng")
+    bom = data[8:12]
+    if bom == b"\x4d\x3c\x2b\x1a":
+        endian = "<"
+    elif bom == b"\x1a\x2b\x3c\x4d":
+        endian = ">"
+    else:
+        raise BackendError("capture: bad pcapng byte-order magic")
+
+    interfaces: list[int] = []  # linktype per Interface Description Block, in order
+    off = 0
+    while off + 12 <= n:
+        block_type = struct.unpack(endian + "I", data[off : off + 4])[0]
+        total_len = struct.unpack(endian + "I", data[off + 4 : off + 8])[0]
+        if total_len < 12 or off + total_len > n:
+            break
+        body = data[off + 8 : off + total_len - 4]
+        if block_type == 0x00000001:  # Interface Description Block
+            if len(body) >= 2:
+                interfaces.append(struct.unpack(endian + "H", body[0:2])[0])
+        elif block_type == 0x00000006:  # Enhanced Packet Block
+            if len(body) >= 20:
+                iface_id = struct.unpack(endian + "I", body[0:4])[0]
+                cap_len = struct.unpack(endian + "I", body[12:16])[0]
+                pkt = body[20 : 20 + cap_len]
+                if interfaces:
+                    lt = interfaces[iface_id] if iface_id < len(interfaces) else interfaces[0]
+                    yield lt, pkt
+        elif block_type == 0x00000003:  # Simple Packet Block
+            if len(body) >= 4 and interfaces:
+                yield interfaces[0], body[4:]
+        off += total_len
 
 
 def _strip_link(linktype: int, pkt: bytes) -> bytes | None:

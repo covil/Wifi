@@ -178,10 +178,21 @@ python -m wifiaudit capture --config config.toml \
     --live --iface wlan0 --channel 6 --seconds 60
 ```
 
+**Two capture methods** (choose via `[capture] tool`, or the menu's "How do you
+want to capture?" prompt):
+
+- **`airodump-ng`** — captures the WPA **4-way handshake**. Needs a client to
+  (re)connect, so it pairs with deauth. Writes `.cap`.
+- **`hcxdumptool`** — captures the **PMKID** directly from the AP. This is
+  **clientless**: no connected device and no deauth required, which is ideal when
+  the target AP has no clients. Writes `.pcapng` (the parser reads both formats).
+
 **Deauthentication** (actively knocking a client off to force a fast re-handshake)
 is an active transmission and is **double-gated**: it runs only when you both set
-`[capture] allow_deauth = true` in config *and* pass `--deauth`. Enable it only
-when your rules of engagement explicitly permit it.
+`[capture] allow_deauth = true` in config *and* pass `--deauth`. When enabled it
+is sent in **bounded bursts repeatedly across the capture window** (tunable via
+`[capture] deauth_interval`) to maximize the chance of catching a handshake.
+Enable it only when your rules of engagement explicitly permit it.
 
 ## Stage 3 — offline cracking
 

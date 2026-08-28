@@ -179,6 +179,7 @@ class CaptureConfig:
     output_dir: str = "captures"
     tool: str = "airodump-ng"
     allow_deauth: bool = False
+    deauth_interval: int = 8
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "CaptureConfig":
@@ -188,12 +189,16 @@ class CaptureConfig:
         allow_deauth = data.get("allow_deauth", False)
         if not isinstance(allow_deauth, bool):
             raise ConfigError("[capture] allow_deauth: expected true/false")
+        interval = data.get("deauth_interval", 8)
+        if not isinstance(interval, int) or isinstance(interval, bool) or interval <= 0:
+            raise ConfigError("[capture] deauth_interval: expected a positive integer")
         return cls(
             default_iface=_as_str(data.get("default_iface", "wlan0"), "capture", "default_iface"),
             capture_seconds=seconds,
             output_dir=_as_str(data.get("output_dir", "captures"), "capture", "output_dir"),
             tool=_as_str(data.get("tool", "airodump-ng"), "capture", "tool"),
             allow_deauth=allow_deauth,
+            deauth_interval=interval,
         )
 
 
