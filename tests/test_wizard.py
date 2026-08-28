@@ -7,7 +7,18 @@ import datetime as dt
 import pytest
 
 from wifiaudit.core.config import Config, load_config
-from wifiaudit.wizard import Console, Wizard, run_init, run_menu
+from wifiaudit.wizard import Console, Wizard, build_config_text, run_init, run_menu
+
+
+def _write_config(path, *, authorized=True, wordlist=""):
+    path.write_text(
+        build_config_text(
+            operator="Op <op@example.com>", organization="Org", reference="SOW-1",
+            expires="2099-12-31", essids=["AuditLab-*"], wordlist=wordlist,
+            authorized=authorized,
+        ),
+        encoding="utf-8",
+    )
 
 NOW = dt.date(2026, 8, 28)
 
@@ -133,3 +144,25 @@ def test_menu_verify_without_config_prompts_setup(tmp_path, fixtures_dir):
     rc = run_menu(console, config_path=tmp_path / "missing.toml", now=NOW, fixtures=fixtures_dir)
     assert rc == 0
     assert "Set up" in console.text
+
+
+def test_menu_verify_with_config_loads_it(tmp_path, fixtures_dir):
+    # choose 4 with a real config present, then quit — exercises load_config.
+    cfg = tmp_path / "config.toml"
+    _write_config(cfg)
+    console = ScriptedConsole(["4", "5"])
+    rc = run_menu(console, config_path=cfg, now=NOW, fixtures=fixtures_dir)
+    assert rc == 0
+    assert "Audit log" in console.text
+
+
+def test_menu_live_cancel_exercises_config_load(tmp_path, fixtures_dir):
+    # choose 3 (live), provide iface + wordlist, then decline "Continue?" so no
+    # hardware is touched. This path loads the config — the regression that
+    # `load_config` was not imported would fail here.
+    cfg = tmp_path / "config.toml"
+    _write_config(cfg)
+    console = ScriptedConsole(["3", "wlan0", "some-wordlist.txt", "no", "5"])
+    rc = run_menu(console, config_path=cfg, now=NOW, fixtures=fixtures_dir)
+    assert rc == 0
+    assert "Cancelled" in console.text

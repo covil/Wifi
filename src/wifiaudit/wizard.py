@@ -20,7 +20,7 @@ from typing import Callable
 from wifiaudit.capture.backends import AirodumpBackend, ReplayBackend
 from wifiaudit.capture.capturer import Capturer
 from wifiaudit.capture.models import CaptureResult, CaptureTarget
-from wifiaudit.core.config import Config
+from wifiaudit.core.config import Config, load_config
 from wifiaudit.core.errors import ConfigError, WifiAuditError
 from wifiaudit.core.iface import monitor_mode
 from wifiaudit.crack.cracker import Cracker
