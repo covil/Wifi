@@ -45,6 +45,10 @@ class CaptureBackend(ABC):
     """Produces a :class:`CaptureResult` for one capture pass."""
 
     name: str = "abstract"
+    # True if the tool sets up the interface itself (so callers must NOT pre-set
+    # monitor mode). airodump needs an already-monitor interface; hcxdumptool
+    # manages its own and fails if the interface is pre-set to monitor.
+    self_manages_monitor: bool = False
 
     @abstractmethod
     def capture(
@@ -204,10 +208,12 @@ class HcxDumpToolBackend(CaptureBackend):
 
     ``hcxdumptool`` requests the PMKID directly from the AP, so it needs no
     connected client and no deauth. It writes pcapng, which the same pure parser
-    reads. Assumes ``iface`` is in monitor mode. Live-only; untested off-hardware.
+    reads. It sets up the interface itself (managed -> monitor via nl80211), so
+    the caller must NOT pre-set monitor mode. Live-only; untested off-hardware.
     """
 
     name = "hcxdumptool"
+    self_manages_monitor = True
 
     def __init__(
         self, *, output_dir: str | Path = "captures", hcxdumptool_path: str | None = None

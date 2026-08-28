@@ -23,6 +23,13 @@ def test_capture_backend_factory_selects_tool():
     assert isinstance(capture_backend("something-else"), AirodumpBackend)
 
 
+def test_monitor_mode_ownership_flags():
+    # airodump needs the caller to pre-set monitor mode; hcxdumptool sets up the
+    # interface itself and must NOT be pre-set (this was the "shared interface" bug).
+    assert capture_backend("airodump-ng").self_manages_monitor is False
+    assert capture_backend("hcxdumptool").self_manages_monitor is True
+
+
 def test_airodump_deauth_interval_has_a_floor():
     b = capture_backend("airodump-ng", deauth_interval=1)  # below the floor
     assert b.deauth_interval >= 3

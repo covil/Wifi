@@ -101,18 +101,21 @@ class Wizard:
                  tool: str | None = None) -> CaptureResult:
         capturer_backend_iface = iface or self.config.discovery.default_iface
         if live:
-            with monitor_mode(capturer_backend_iface) as mon:
-                backend = capture_backend(
-                    tool or self.config.capture.tool,
-                    output_dir=self.config.capture.output_dir,
-                    deauth_interval=self.config.capture.deauth_interval,
-                )
-                capturer = Capturer.from_config(self.config, backend, now=self.now)
+            backend = capture_backend(
+                tool or self.config.capture.tool,
+                output_dir=self.config.capture.output_dir,
+                deauth_interval=self.config.capture.deauth_interval,
+            )
+            seconds_v = seconds or self.config.capture.capture_seconds
+            capturer = Capturer.from_config(self.config, backend, now=self.now)
+            if getattr(backend, "self_manages_monitor", False):
+                # e.g. hcxdumptool sets up the interface itself; pre-setting
+                # monitor mode makes it fail on a "shared interface".
                 return capturer.run(
-                    target, iface=mon,
-                    seconds=seconds or self.config.capture.capture_seconds,
-                    deauth=deauth,
+                    target, iface=capturer_backend_iface, seconds=seconds_v, deauth=deauth
                 )
+            with monitor_mode(capturer_backend_iface) as mon:
+                return capturer.run(target, iface=mon, seconds=seconds_v, deauth=deauth)
         if not capture_input:
             raise ConfigError("wizard: offline mode needs a saved capture file.")
         backend = ReplayBackend(capture_input)
@@ -185,7 +188,7 @@ class Wizard:
         # Stage 2 — capture
         c.say(f"\n[2/{stages}] Capturing a handshake for {ap.essid} ({ap.bssid})...")
         if live:
-            c.say("  (setting the adapter to monitor mode; this needs root)")
+            c.say("  (this needs root; the adapter is put into monitor mode)")
         target = CaptureTarget(bssid=ap.bssid, essid=ap.essid, channel=ap.channel)
         capture = self._capture(
             target, live=live, capture_input=capture_input,
