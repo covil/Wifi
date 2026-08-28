@@ -163,7 +163,8 @@ def test_menu_live_cancel_typed_iface_when_none_detected(tmp_path, fixtures_dir)
     _write_config(cfg)
     console = ScriptedConsole(["3", "wlan0", "some-wordlist.txt", "no", "5"])
     rc = run_menu(
-        console, config_path=cfg, now=NOW, fixtures=fixtures_dir, iface_lister=lambda: []
+        console, config_path=cfg, now=NOW, fixtures=fixtures_dir,
+        iface_lister=lambda: [], wordlist_lister=lambda: [],
     )
     assert rc == 0
     assert "could not auto-detect" in console.text
@@ -174,14 +175,30 @@ def test_menu_live_picks_detected_interface(tmp_path, fixtures_dir):
     # Interfaces detected -> user picks from a menu (no typing the name).
     cfg = tmp_path / "config.toml"
     _write_config(cfg)
-    # answers: 3 (live), 2 (pick wlan1 from the list), wordlist, decline, quit
+    # answers: 3 (live), 2 (pick wlan1), type wordlist (none detected), decline, quit
     console = ScriptedConsole(["3", "2", "some-wordlist.txt", "no", "5"])
     rc = run_menu(
         console, config_path=cfg, now=NOW, fixtures=fixtures_dir,
-        iface_lister=lambda: ["wlan0", "wlan1"],
+        iface_lister=lambda: ["wlan0", "wlan1"], wordlist_lister=lambda: [],
     )
     assert rc == 0
     assert "Select the wireless interface" in console.text
+    assert "Cancelled" in console.text
+
+
+def test_menu_live_picks_detected_wordlist(tmp_path, fixtures_dir):
+    # Wordlists detected -> user picks one from the menu (no typing the path).
+    cfg = tmp_path / "config.toml"
+    _write_config(cfg)
+    # 3 (live), iface typed, 1 (pick first wordlist), decline, quit
+    console = ScriptedConsole(["3", "wlan0", "1", "no", "5"])
+    rc = run_menu(
+        console, config_path=cfg, now=NOW, fixtures=fixtures_dir,
+        iface_lister=lambda: [],
+        wordlist_lister=lambda: ["/usr/share/wordlists/fasttrack.txt", "/tmp/other.txt"],
+    )
+    assert rc == 0
+    assert "Select a wordlist" in console.text
     assert "Cancelled" in console.text
 
 

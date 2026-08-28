@@ -23,6 +23,7 @@ from wifiaudit.capture.models import CaptureResult, CaptureTarget
 from wifiaudit.core.config import Config, load_config
 from wifiaudit.core.errors import ConfigError, WifiAuditError
 from wifiaudit.core.iface import list_wireless_interfaces, monitor_mode
+from wifiaudit.core.wordlists import list_wordlists, read_wordlist
 from wifiaudit.crack.cracker import Cracker
 from wifiaudit.crack.models import CrackResult
 from wifiaudit.discovery.backends import FileBackend, IwScanBackend
@@ -123,7 +124,7 @@ class Wizard:
         cracker = Cracker.from_config(self.config, now=self.now)
         return cracker.run(
             capture=data,
-            wordlist=wl.read_text(encoding="utf-8", errors="replace"),
+            wordlist=read_wordlist(wl),
             ssid=ap.essid or "",
             bssid=ap.bssid,
             channel=ap.channel,
@@ -344,7 +345,42 @@ def _menu_offline_demo(console: Console, config_path: Path, now, fixtures: Path)
     )
 
 
-def _menu_live(console: Console, config_path: Path, now, iface_lister=list_wireless_interfaces) -> None:
+def _default_wordlists() -> list[str]:
+    sample = _fixtures_dir() / "wordlist_sample.txt"
+    extra = (str(sample),) if sample.is_file() else ()
+    return list_wordlists(extra=extra)
+
+
+def _choose_wordlist(console: Console, config, lister) -> str:
+    if config.crack.wordlist:
+        return config.crack.wordlist
+    found = lister()
+    if not found:
+        console.say(
+            "\n(No wordlists found in the usual places. On Kali the classic one is "
+            "/usr/share/wordlists/rockyou.txt.gz — gunzip it, or install with "
+            "'sudo apt install wordlists'.)"
+        )
+        return console.ask("Path to a wordlist file")
+    labels = []
+    for p in found:
+        tag = ""
+        if p.endswith("wordlist_sample.txt"):
+            tag = "  (tiny demo list)"
+        elif p.endswith(".gz"):
+            tag = "  (compressed; read directly)"
+        labels.append(p + tag)
+    labels.append("Enter a different path...")
+    idx = console.choose("\nSelect a wordlist:", labels)
+    if idx == len(found):
+        return console.ask("Path to a wordlist file")
+    return found[idx]
+
+
+def _menu_live(
+    console: Console, config_path: Path, now,
+    iface_lister=list_wireless_interfaces, wordlist_lister=None,
+) -> None:
     if not config_path.is_file():
         console.say("\nNo config yet — choose 'Set up' first (option 1).")
         return
@@ -357,7 +393,8 @@ def _menu_live(console: Console, config_path: Path, now, iface_lister=list_wirel
     else:
         console.say("(could not auto-detect a wireless interface)")
         iface = console.ask("Wireless interface", config.discovery.default_iface)
-    wl = config.crack.wordlist or console.ask("Path to a wordlist file")
+
+    wl = _choose_wordlist(console, config, wordlist_lister or _default_wordlists)
     deauth = False
     if config.capture.allow_deauth:
         deauth = console.confirm("Send deauth to speed up capture?", default=False)
@@ -396,6 +433,7 @@ def run_menu(
     now=None,
     fixtures: Path | None = None,
     iface_lister=list_wireless_interfaces,
+    wordlist_lister=None,
 ) -> int:
     """Interactive top-level menu. Loops until the user chooses Quit."""
     fixtures = fixtures or _fixtures_dir()
@@ -416,7 +454,10 @@ def run_menu(
             elif choice == 1:
                 _menu_offline_demo(console, config_path, now, fixtures)
             elif choice == 2:
-                _menu_live(console, config_path, now, iface_lister=iface_lister)
+                _menu_live(
+                    console, config_path, now,
+                    iface_lister=iface_lister, wordlist_lister=wordlist_lister,
+                )
             elif choice == 3:
                 _menu_verify(console, config_path)
             else:

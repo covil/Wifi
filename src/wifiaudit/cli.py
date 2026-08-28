@@ -28,6 +28,7 @@ from wifiaudit.capture.models import CaptureResult, CaptureTarget
 from wifiaudit.core.audit import verify_chain
 from wifiaudit.core.config import load_config, normalize_bssid
 from wifiaudit.core.errors import ConfigError, WifiAuditError
+from wifiaudit.core.wordlists import read_wordlist
 from wifiaudit.crack.cracker import Cracker
 from wifiaudit.crack.models import CrackResult
 from wifiaudit.wizard import Console, Wizard, run_init, run_menu
@@ -250,7 +251,7 @@ def _cmd_crack(args: argparse.Namespace) -> int:
     cracker = Cracker.from_config(config)
     result = cracker.run(
         capture=cap.read_bytes(),
-        wordlist=wl.read_text(encoding="utf-8", errors="replace"),
+        wordlist=read_wordlist(wl),
         ssid=args.essid,
         bssid=bssid,
         channel=args.channel,
