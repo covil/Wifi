@@ -142,13 +142,15 @@ class Wizard:
         wordlist: str | None = None,
         seconds: int | None = None,
         deauth: bool = False,
+        do_crack: bool = True,
     ) -> WizardOutcome | None:
         c = self.c
+        stages = "3" if do_crack else "2"
         c.say("=== wifiaudit guided run ===")
         c.say(f"Operator authorized via config; scope enforced throughout.\n")
 
         # Stage 1 — discovery
-        c.say("[1/3] Looking for in-scope networks...")
+        c.say(f"[1/{stages}] Looking for in-scope networks...")
         scan = self._discover(live=live, discover_input=discover_input, iface=iface)
         targets = scan.in_scope_aps()
         if not targets:
@@ -175,7 +177,7 @@ class Wizard:
             ap.essid = essid or None
 
         # Stage 2 — capture
-        c.say(f"\n[2/3] Capturing a handshake for {ap.essid} ({ap.bssid})...")
+        c.say(f"\n[2/{stages}] Capturing a handshake for {ap.essid} ({ap.bssid})...")
         if live:
             c.say("  (setting the adapter to monitor mode; this needs root)")
         target = CaptureTarget(bssid=ap.bssid, essid=ap.essid, channel=ap.channel)
@@ -188,6 +190,12 @@ class Wizard:
             f"  captured: {s['complete_handshakes']} handshake(s), "
             f"{s['pmkids']} PMKID(s)."
         )
+
+        if not do_crack:
+            saved = f" Saved to {capture.capture_path}." if capture.capture_path else ""
+            c.say(f"\nCapture-only run: cracking skipped.{saved}")
+            return WizardOutcome(target=ap, capture=capture)
+
         if not capture.got_crackable:
             c.say(
                 "\nNo crackable handshake or PMKID was captured.\n"
@@ -377,6 +385,25 @@ def _choose_wordlist(console: Console, config, lister) -> str:
     return found[idx]
 
 
+def _choose_interface(console: Console, config, lister) -> str:
+    ifaces = lister()
+    if ifaces:
+        console.say(
+            "\nTip: pick your external USB adapter that shows 'monitor=yes' "
+            "(the built-in card, usually [PCI], often can't capture)."
+        )
+        idx = console.choose("Select the wireless interface:", [i.label() for i in ifaces])
+        return ifaces[idx].name
+    console.say("(could not auto-detect a wireless interface)")
+    return console.ask("Wireless interface", config.discovery.default_iface)
+
+
+def _ask_deauth(console: Console, config) -> bool:
+    if config.capture.allow_deauth:
+        return console.confirm("Send deauth to speed up capture?", default=False)
+    return False
+
+
 def _menu_live(
     console: Console, config_path: Path, now,
     iface_lister=describe_interfaces, wordlist_lister=None,
@@ -386,22 +413,9 @@ def _menu_live(
         return
     config = load_config(config_path)
 
-    ifaces = iface_lister()
-    if ifaces:
-        console.say(
-            "\nTip: pick your external USB adapter that shows 'monitor=yes' "
-            "(the built-in card, usually [PCI], often can't capture)."
-        )
-        idx = console.choose("Select the wireless interface:", [i.label() for i in ifaces])
-        iface = ifaces[idx].name
-    else:
-        console.say("(could not auto-detect a wireless interface)")
-        iface = console.ask("Wireless interface", config.discovery.default_iface)
-
+    iface = _choose_interface(console, config, iface_lister)
     wl = _choose_wordlist(console, config, wordlist_lister or _default_wordlists)
-    deauth = False
-    if config.capture.allow_deauth:
-        deauth = console.confirm("Send deauth to speed up capture?", default=False)
+    deauth = _ask_deauth(console, config)
     console.say(
         "\nThis will scan and capture on IN-SCOPE targets only. "
         "It needs root (run with sudo) and a monitor-capable adapter."
@@ -411,6 +425,28 @@ def _menu_live(
         return
     Wizard(config, console, now=now).run(
         live=True, iface=iface, wordlist=wl, deauth=deauth
+    )
+
+
+def _menu_capture_only(
+    console: Console, config_path: Path, now, iface_lister=describe_interfaces,
+) -> None:
+    if not config_path.is_file():
+        console.say("\nNo config yet — choose 'Set up' first (option 1).")
+        return
+    config = load_config(config_path)
+
+    iface = _choose_interface(console, config, iface_lister)
+    deauth = _ask_deauth(console, config)
+    console.say(
+        "\nThis will capture a handshake/PMKID on IN-SCOPE targets only and then "
+        "stop (no cracking). It needs root and a monitor-capable adapter."
+    )
+    if not console.confirm("Continue?", default=False):
+        console.say("Cancelled.")
+        return
+    Wizard(config, console, now=now).run(
+        live=True, iface=iface, deauth=deauth, do_crack=False
     )
 
 
@@ -444,7 +480,8 @@ def run_menu(
     options = [
         "Set up (create your config)",
         "Try it offline (demo with sample data, no adapter needed)",
-        "Run on real WiFi (guided; Linux + adapter + sudo)",
+        "Run on real WiFi - full: capture + crack (Linux + adapter + sudo)",
+        "Capture only - no cracking (Linux + adapter + sudo)",
         "Check the audit log",
         "Quit",
     ]
@@ -463,6 +500,8 @@ def run_menu(
                     iface_lister=iface_lister, wordlist_lister=wordlist_lister,
                 )
             elif choice == 3:
+                _menu_capture_only(console, config_path, now, iface_lister=iface_lister)
+            elif choice == 4:
                 _menu_verify(console, config_path)
             else:
                 console.say("Bye.")

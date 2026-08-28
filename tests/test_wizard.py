@@ -117,8 +117,8 @@ def test_init_declined_authorization_writes_false(tmp_path):
 
 
 def test_menu_offline_demo_then_quit(tmp_path, fixtures_dir):
-    # choose 2 (offline demo), pick target 1 in the wizard, then choose 5 (quit)
-    console = ScriptedConsole(["2", "1", "5"])
+    # choose 2 (offline demo), pick target 1 in the wizard, then choose 6 (quit)
+    console = ScriptedConsole(["2", "1", "6"])
     rc = run_menu(console, config_path=tmp_path / "config.toml", now=NOW, fixtures=fixtures_dir)
     assert rc == 0
     assert "Summer2026!" in console.text
@@ -130,7 +130,7 @@ def test_menu_setup_then_quit(tmp_path, fixtures_dir):
     answers = [
         "1",
         "Op <op@example.com>", "Org", "SOW-1", "2099-12-31", "AuditLab-*", "", "yes",
-        "5",
+        "6",
     ]
     console = ScriptedConsole(answers)
     rc = run_menu(console, config_path=tmp_path / "config.toml", now=NOW, fixtures=fixtures_dir)
@@ -139,18 +139,18 @@ def test_menu_setup_then_quit(tmp_path, fixtures_dir):
 
 
 def test_menu_verify_without_config_prompts_setup(tmp_path, fixtures_dir):
-    # choose 4 (check audit log) with no config, then quit
-    console = ScriptedConsole(["4", "5"])
+    # choose 5 (check audit log) with no config, then quit
+    console = ScriptedConsole(["5", "6"])
     rc = run_menu(console, config_path=tmp_path / "missing.toml", now=NOW, fixtures=fixtures_dir)
     assert rc == 0
     assert "Set up" in console.text
 
 
 def test_menu_verify_with_config_loads_it(tmp_path, fixtures_dir):
-    # choose 4 with a real config present, then quit — exercises load_config.
+    # choose 5 with a real config present, then quit — exercises load_config.
     cfg = tmp_path / "config.toml"
     _write_config(cfg)
-    console = ScriptedConsole(["4", "5"])
+    console = ScriptedConsole(["5", "6"])
     rc = run_menu(console, config_path=cfg, now=NOW, fixtures=fixtures_dir)
     assert rc == 0
     assert "Audit log" in console.text
@@ -161,7 +161,7 @@ def test_menu_live_cancel_typed_iface_when_none_detected(tmp_path, fixtures_dir)
     # wordlist, decline "Continue?". Exercises load_config (regression guard).
     cfg = tmp_path / "config.toml"
     _write_config(cfg)
-    console = ScriptedConsole(["3", "wlan0", "some-wordlist.txt", "no", "5"])
+    console = ScriptedConsole(["3", "wlan0", "some-wordlist.txt", "no", "6"])
     rc = run_menu(
         console, config_path=cfg, now=NOW, fixtures=fixtures_dir,
         iface_lister=lambda: [], wordlist_lister=lambda: [],
@@ -182,7 +182,7 @@ def test_menu_live_picks_detected_interface(tmp_path, fixtures_dir):
         InterfaceInfo("wlan1", bus="usb", driver="rt2800usb", monitor=True),
     ]
     # answers: 3 (live), 2 (pick the USB monitor-capable one), type wordlist, decline, quit
-    console = ScriptedConsole(["3", "2", "some-wordlist.txt", "no", "5"])
+    console = ScriptedConsole(["3", "2", "some-wordlist.txt", "no", "6"])
     rc = run_menu(
         console, config_path=cfg, now=NOW, fixtures=fixtures_dir,
         iface_lister=lambda: ifaces, wordlist_lister=lambda: [],
@@ -198,7 +198,7 @@ def test_menu_live_picks_detected_wordlist(tmp_path, fixtures_dir):
     cfg = tmp_path / "config.toml"
     _write_config(cfg)
     # 3 (live), iface typed, 1 (pick first wordlist), decline, quit
-    console = ScriptedConsole(["3", "wlan0", "1", "no", "5"])
+    console = ScriptedConsole(["3", "wlan0", "1", "no", "6"])
     rc = run_menu(
         console, config_path=cfg, now=NOW, fixtures=fixtures_dir,
         iface_lister=lambda: [],
@@ -207,6 +207,37 @@ def test_menu_live_picks_detected_wordlist(tmp_path, fixtures_dir):
     assert rc == 0
     assert "Select a wordlist" in console.text
     assert "Cancelled" in console.text
+
+
+def test_menu_capture_only_no_wordlist_prompt(tmp_path, fixtures_dir):
+    # Option 4 (capture only): pick interface, decline continue. It must NOT ask
+    # for a wordlist, since nothing is cracked.
+    cfg = tmp_path / "config.toml"
+    _write_config(cfg)
+    console = ScriptedConsole(["4", "wlan0", "no", "6"])
+    rc = run_menu(
+        console, config_path=cfg, now=NOW, fixtures=fixtures_dir,
+        iface_lister=lambda: [], wordlist_lister=lambda: ["/usr/share/wordlists/x.txt"],
+    )
+    assert rc == 0
+    assert "no cracking" in console.text
+    assert "Select a wordlist" not in console.text   # never prompted for one
+    assert "Cancelled" in console.text
+
+
+def test_wizard_capture_only_skips_crack(config_data, fixtures_dir):
+    # Wizard.run(do_crack=False) must capture and stop, returning crack=None.
+    cfg = Config.from_dict(config_data())
+    console = ScriptedConsole(["1"])  # pick the first in-scope target
+    outcome = Wizard(cfg, console, now=NOW).run(
+        discover_input=str(fixtures_dir / "airodump_sample.csv"),
+        capture_input=str(fixtures_dir / "handshake_sample.pcap"),
+        do_crack=False,
+    )
+    assert outcome is not None
+    assert outcome.capture.got_crackable
+    assert outcome.crack is None
+    assert "cracking skipped" in console.text.lower()
 
 
 def test_parse_iw_dev():
