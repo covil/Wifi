@@ -1,0 +1,64 @@
+# wifiaudit example configuration
+# -----------------------------------------------------------------------------
+# Copy this to `config.toml` and edit it for your engagement.
+# The authorization gate WILL REFUSE TO RUN until the [authorization] block is
+# truthful and complete. Do not set `authorized = true` unless you actually are.
+
+[authorization]
+# Must be true for any stage to run. This is an explicit attestation.
+authorized      = false
+# Who is running the engagement.
+operator        = "Your Name <you@example.com>"
+# The organization you are testing on behalf of (optional but recommended).
+organization    = "Example Security Ltd"
+# Reference to the signed authorization / statement of work / permission email.
+# Free text, but make it traceable (a ticket ID, SOW number, contract ref, ...).
+reference       = "SOW-2026-001 / written permission on file"
+# Authorization window. Operations are refused before `starts` or after `expires`.
+# ISO-8601 dates (YYYY-MM-DD). `starts` is optional; `expires` is strongly advised.
+starts          = "2026-08-01"
+expires         = "2026-12-31"
+notes           = "Client lab network only. No production SSIDs."
+
+[scope]
+# Targets you are authorized to act on. Matching is case-insensitive.
+# BSSIDs: exact MAC addresses (any common separator; normalized internally).
+# ESSIDs: exact names or shell-style wildcards (*, ?).
+# channels: integers; empty list means "no channel restriction".
+#
+# An empty scope means NOTHING is in scope (default-deny) — passive discovery
+# still runs, but every network will be tagged out-of-scope and active stages
+# will refuse to act.
+bssids   = []
+essids   = ["AuditLab-*"]
+channels = []
+
+[discovery]
+default_backend = "iw"       # backend for --live runs: "iw"
+default_iface   = "wlan0"
+scan_seconds    = 15
+
+[capture]
+# Stage 2 (handshake / PMKID capture) settings.
+default_iface  = "wlan0"
+capture_seconds = 60          # how long a --live capture runs
+output_dir     = "captures"   # where live .cap files are written
+tool           = "airodump-ng"
+# Deauthentication is an ACTIVE transmission that disrupts clients. It stays off
+# unless you set this true AND pass --deauth. Only enable it when your rules of
+# engagement explicitly permit deauth against in-scope targets.
+allow_deauth   = false
+
+[crack]
+# Stage 3 (offline dictionary attack) settings.
+# Optional default wordlist; --wordlist overrides it. Leave empty to require the
+# flag explicitly. Cracking only ever runs against in-scope targets, and the
+# recovered passphrase is printed to you but kept OUT of the audit log.
+wordlist = ""
+
+[audit]
+enabled = true
+path    = "audit.log.jsonl"  # hash-chained, append-only
+
+[output]
+dir = "output"

@@ -1,0 +1,31 @@
+BSS de:ad:be:ef:00:01(on wlan0)
+	last seen: 100 ms ago
+	freq: 2437
+	beacon interval: 100 TUs
+	capability: ESS Privacy ShortSlotTime (0x0411)
+	signal: -42.00 dBm
+	SSID: AuditLab-AP1
+	DS Parameter set: channel 6
+	RSN:	 * Version: 1
+		 * Group cipher: CCMP
+		 * Pairwise ciphers: CCMP
+		 * Authentication suites: PSK
+		 * Capabilities: 1-PTKSA-RC 1-GTKSA-RC (0x0000)
+BSS aa:bb:cc:11:22:33(on wlan0)
+	freq: 2412
+	beacon interval: 100 TUs
+	capability: ESS Privacy (0x0411)
+	signal: -70.00 dBm
+	SSID: NeighborNet
+	DS Parameter set: channel 1
+	RSN:	 * Version: 1
+		 * Group cipher: CCMP
+		 * Pairwise ciphers: CCMP
+		 * Authentication suites: PSK
+BSS 02:11:22:33:44:55(on wlan0)
+	freq: 2462
+	beacon interval: 100 TUs
+	capability: ESS ShortSlotTime (0x0401)
+	signal: -60.00 dBm
+	SSID: OpenCafe
+	DS Parameter set: channel 11

@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+
+# Test / coverage
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Local config & engagement artifacts — NEVER commit these.
+# They can contain scope, credentials, captures, and audit trails.
+config.toml
+*.audit.jsonl
+audit.log.jsonl
+audit*.jsonl
+captures/
+*.cap
+*.pcap
+*.pcapng
+*.hccapx
+*.22000
+loot/
+reports/
+# ...but the bundled sample captures used by the offline quickstart/tests ARE
+# safe, synthetic, and must be tracked.
+!tests/fixtures/**/*.pcap
+!tests/fixtures/*.pcap
+!tests/fixtures/*.cap
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

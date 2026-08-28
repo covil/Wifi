@@ -1,0 +1,52 @@
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "wifiaudit"
+version = "0.1.0"
+description = "Authorized-use WiFi security auditing toolkit (discovery, capture, crack, report)."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "wifiaudit contributors" }]
+keywords = ["wifi", "802.11", "security", "pentest", "audit", "wpa"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Security",
+]
+
+# Runtime dependencies are intentionally empty: the whole toolkit runs on the
+# Python standard library (tomllib, argparse, subprocess, hashlib, dataclasses).
+# This keeps installation trivial and the audit surface small. Optional
+# integrations (e.g. pretty tables) belong in extras, never in the core path.
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+]
+
+[project.scripts]
+wifiaudit = "wifiaudit.cli:main"
+
+[project.urls]
+Homepage = "https://example.invalid/wifiaudit"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/wifiaudit"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+pythonpath = ["src"]
+
+[tool.coverage.run]
+branch = true
+source = ["wifiaudit"]

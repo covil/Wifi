@@ -1,0 +1,8 @@
+BSSID, First time seen, Last time seen, channel, Speed, Privacy, Cipher, Authentication, Power, # beacons, # IV, LAN IP, ID-length, ESSID, Key
+DE:AD:BE:EF:00:01, 2026-08-28 10:00:00, 2026-08-28 10:05:00,  6,  270, WPA2, CCMP, PSK, -42,      120,        0,   0.  0.  0.  0,  12, AuditLab-AP1,
+DE:AD:BE:EF:00:02, 2026-08-28 10:00:10, 2026-08-28 10:05:00, 11,  270, WPA2, CCMP, PSK, -55,       98,        0,   0.  0.  0.  0,  14, AuditLab-Guest,
+AA:BB:CC:11:22:33, 2026-08-28 10:00:20, 2026-08-28 10:05:00,  1,  130, WPA2, CCMP, PSK, -70,       75,        0,   0.  0.  0.  0,  11, NeighborNet,
+
+Station MAC, First time seen, Last time seen, Power, # packets, BSSID, Probed ESSIDs
+11:22:33:44:55:66, 2026-08-28 10:01:00, 2026-08-28 10:05:00, -55,       42, DE:AD:BE:EF:00:01, AuditLab-AP1
+A0:00:11:22:33:44, 2026-08-28 10:02:00, 2026-08-28 10:04:00, -70,       10, (not associated), FreeWiFi, CoffeeShop
