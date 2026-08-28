@@ -6,6 +6,7 @@ from wifiaudit.capture.backends import (
     AirodumpBackend,
     HcxDumpToolBackend,
     ReplayBackend,
+    _hcx_output_flag,
     capture_backend,
 )
 from wifiaudit.capture.models import CaptureTarget
@@ -25,6 +26,14 @@ def test_capture_backend_factory_selects_tool():
 def test_airodump_deauth_interval_has_a_floor():
     b = capture_backend("airodump-ng", deauth_interval=1)  # below the floor
     assert b.deauth_interval >= 3
+
+
+def test_hcx_output_flag_by_version():
+    assert _hcx_output_flag("hcxdumptool 6.2.7") == "-o"
+    assert _hcx_output_flag("hcxdumptool 6.3.0") == "-w"
+    assert _hcx_output_flag("hcxdumptool 6.3.4-...") == "-w"
+    assert _hcx_output_flag("hcxdumptool 7.0.0") == "-w"
+    assert _hcx_output_flag("no version here") == "-w"   # safe default
 
 
 def test_replay_backend_reads_pcapng(tmp_path, make_valid, make_pcapng):

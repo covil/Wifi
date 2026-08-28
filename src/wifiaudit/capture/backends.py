@@ -30,6 +30,17 @@ _DEAUTH_BURST = 5        # deauth frames per round (aireplay-ng --deauth N)
 _DEAUTH_MIN_INTERVAL = 3  # seconds; floor between rounds
 
 
+def _hcx_output_flag(version_text: str) -> str:
+    """``-o`` for hcxdumptool < 6.3, else ``-w``. Defaults to ``-w`` if unknown."""
+    import re
+
+    m = re.search(r"(\d+)\.(\d+)", version_text)
+    if not m:
+        return "-w"
+    major, minor = int(m.group(1)), int(m.group(2))
+    return "-o" if (major, minor) < (6, 3) else "-w"
+
+
 class CaptureBackend(ABC):
     """Produces a :class:`CaptureResult` for one capture pass."""
 
@@ -204,6 +215,19 @@ class HcxDumpToolBackend(CaptureBackend):
         self.output_dir = Path(output_dir)
         self._hcx = hcxdumptool_path or shutil.which("hcxdumptool")
 
+    def _output_flag(self) -> str:
+        """Pick the output-file flag for the installed hcxdumptool version.
+
+        6.2.x uses ``-o``; 6.3.x switched to ``-w``. Default to ``-w`` (newer).
+        """
+        try:
+            out = subprocess.run(
+                [self._hcx, "--version"], capture_output=True, text=True, timeout=5, check=False
+            )
+        except (OSError, subprocess.SubprocessError):
+            return "-w"
+        return _hcx_output_flag(out.stdout + out.stderr)
+
     def capture(self, *, target, iface=None, seconds=None, deauth=False) -> CaptureResult:
         if not iface:
             raise BackendError("hcxdumptool backend requires an interface (--iface).")
@@ -216,26 +240,33 @@ class HcxDumpToolBackend(CaptureBackend):
         out = self.output_dir / f"pmkid_{normalize_bssid(target.bssid).replace(':', '')}.pcapng"
         duration = max(seconds or 60, 5)
 
-        cmd = [self._hcx, "-i", iface, "-w", str(out)]
+        cmd = [self._hcx, "-i", iface, self._output_flag(), str(out)]
         if target.channel is not None:
             cmd += ["-c", str(target.channel)]
 
-        proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        proc = subprocess.Popen(
+            cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True
+        )
+        stderr_text = ""
         try:
-            proc.wait(timeout=duration)
+            _, stderr_text = proc.communicate(timeout=duration)
         except subprocess.TimeoutExpired:
-            pass  # hcxdumptool runs until stopped
-        finally:
             proc.terminate()
             try:
-                proc.wait(timeout=5)
+                _, stderr_text = proc.communicate(timeout=5)
             except subprocess.TimeoutExpired:
                 proc.kill()
+                _, stderr_text = proc.communicate()
 
         if not out.is_file():
+            tail = (stderr_text or "").strip().splitlines()[-6:]
+            detail = ("\nhcxdumptool said:\n  " + "\n  ".join(tail)) if tail else ""
             raise BackendError(
-                f"hcxdumptool backend: no capture file was produced at {out} "
-                "(interface not in monitor mode, or wrong channel?)."
+                f"hcxdumptool backend: no capture file was produced at {out}.\n"
+                "Common causes: NetworkManager still owns the interface "
+                "(run 'sudo airmon-ng check kill' first), an unsupported "
+                "hcxdumptool version/flags, or a driver that can't inject."
+                + detail
             )
         data = out.read_bytes()
         return _result_from_pcap(
