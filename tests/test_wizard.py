@@ -173,16 +173,23 @@ def test_menu_live_cancel_typed_iface_when_none_detected(tmp_path, fixtures_dir)
 
 def test_menu_live_picks_detected_interface(tmp_path, fixtures_dir):
     # Interfaces detected -> user picks from a menu (no typing the name).
+    from wifiaudit.core.iface import InterfaceInfo
+
     cfg = tmp_path / "config.toml"
     _write_config(cfg)
-    # answers: 3 (live), 2 (pick wlan1), type wordlist (none detected), decline, quit
+    ifaces = [
+        InterfaceInfo("wlan0", bus="pci", driver="iwlwifi", monitor=False),
+        InterfaceInfo("wlan1", bus="usb", driver="rt2800usb", monitor=True),
+    ]
+    # answers: 3 (live), 2 (pick the USB monitor-capable one), type wordlist, decline, quit
     console = ScriptedConsole(["3", "2", "some-wordlist.txt", "no", "5"])
     rc = run_menu(
         console, config_path=cfg, now=NOW, fixtures=fixtures_dir,
-        iface_lister=lambda: ["wlan0", "wlan1"], wordlist_lister=lambda: [],
+        iface_lister=lambda: ifaces, wordlist_lister=lambda: [],
     )
     assert rc == 0
-    assert "Select the wireless interface" in console.text
+    assert "monitor=yes" in console.text          # the helpful detail is shown
+    assert "[USB]" in console.text
     assert "Cancelled" in console.text
 
 
@@ -215,3 +222,34 @@ def test_parse_iw_dev():
         "\t\ttype monitor\n"
     )
     assert _parse_iw_dev(sample) == ["wlan0", "wlan1mon"]
+
+
+def test_parse_monitor_support():
+    from wifiaudit.core.iface import _parse_monitor_support
+
+    supports = (
+        "Wiphy phy1\n"
+        "\tSupported interface modes:\n"
+        "\t\t * managed\n"
+        "\t\t * AP\n"
+        "\t\t * monitor\n"
+        "\tBand 1:\n"
+    )
+    lacks = (
+        "Wiphy phy0\n"
+        "\tSupported interface modes:\n"
+        "\t\t * managed\n"
+        "\t\t * P2P-client\n"
+        "\tBand 1:\n"
+    )
+    assert _parse_monitor_support(supports) is True
+    assert _parse_monitor_support(lacks) is False
+
+
+def test_interface_info_label():
+    from wifiaudit.core.iface import InterfaceInfo
+
+    assert InterfaceInfo("wlan1", bus="usb", driver="rt2800usb", monitor=True).label() == (
+        "wlan1  [USB]  driver=rt2800usb  monitor=yes"
+    )
+    assert "monitor=NO" in InterfaceInfo("wlan0", bus="pci", monitor=False).label()

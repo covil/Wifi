@@ -22,7 +22,7 @@ from wifiaudit.capture.capturer import Capturer
 from wifiaudit.capture.models import CaptureResult, CaptureTarget
 from wifiaudit.core.config import Config, load_config
 from wifiaudit.core.errors import ConfigError, WifiAuditError
-from wifiaudit.core.iface import list_wireless_interfaces, monitor_mode
+from wifiaudit.core.iface import describe_interfaces, monitor_mode
 from wifiaudit.core.wordlists import list_wordlists, read_wordlist
 from wifiaudit.crack.cracker import Cracker
 from wifiaudit.crack.models import CrackResult
@@ -379,7 +379,7 @@ def _choose_wordlist(console: Console, config, lister) -> str:
 
 def _menu_live(
     console: Console, config_path: Path, now,
-    iface_lister=list_wireless_interfaces, wordlist_lister=None,
+    iface_lister=describe_interfaces, wordlist_lister=None,
 ) -> None:
     if not config_path.is_file():
         console.say("\nNo config yet — choose 'Set up' first (option 1).")
@@ -388,8 +388,12 @@ def _menu_live(
 
     ifaces = iface_lister()
     if ifaces:
-        idx = console.choose("\nSelect the wireless interface:", ifaces)
-        iface = ifaces[idx]
+        console.say(
+            "\nTip: pick your external USB adapter that shows 'monitor=yes' "
+            "(the built-in card, usually [PCI], often can't capture)."
+        )
+        idx = console.choose("Select the wireless interface:", [i.label() for i in ifaces])
+        iface = ifaces[idx].name
     else:
         console.say("(could not auto-detect a wireless interface)")
         iface = console.ask("Wireless interface", config.discovery.default_iface)
@@ -432,7 +436,7 @@ def run_menu(
     config_path: Path,
     now=None,
     fixtures: Path | None = None,
-    iface_lister=list_wireless_interfaces,
+    iface_lister=describe_interfaces,
     wordlist_lister=None,
 ) -> int:
     """Interactive top-level menu. Loops until the user chooses Quit."""
