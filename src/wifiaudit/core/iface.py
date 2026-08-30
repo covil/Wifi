@@ -158,6 +158,22 @@ def describe_interfaces() -> list[InterfaceInfo]:
     return infos
 
 
+def ensure_up(iface: str) -> None:
+    """Best-effort bring ``iface`` administratively up (``ip link set up``).
+
+    A no-op if ``ip`` is missing or the command fails (e.g. not root); callers
+    that truly need it up will surface a clearer error on the next operation.
+    """
+    ip = shutil.which("ip")
+    if not ip:
+        return
+    try:
+        subprocess.run([ip, "link", "set", iface, "up"],
+                       capture_output=True, text=True, timeout=5, check=False)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
 @contextmanager
 def monitor_mode(iface: str) -> Iterator[str]:
     """Put ``iface`` into monitor mode for the duration, then restore managed mode.
@@ -193,6 +209,7 @@ def monitor_mode(iface: str) -> Iterator[str]:
 
 __all__ = [
     "monitor_mode",
+    "ensure_up",
     "list_wireless_interfaces",
     "describe_interfaces",
     "InterfaceInfo",

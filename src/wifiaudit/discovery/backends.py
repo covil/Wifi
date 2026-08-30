@@ -57,6 +57,12 @@ class IwScanBackend(ScanBackend):
                 "iw backend: the 'iw' binary was not found on PATH. "
                 "Install it (Linux) or use --input to replay a saved scan."
             )
+        # A scan needs the interface administratively up. It is often left down
+        # after 'airmon-ng check kill' or an interrupted capture, so bring it up.
+        from wifiaudit.core.iface import ensure_up
+
+        ensure_up(iface)
+
         timeout = max(seconds or 15, 10) + 10
         try:
             proc = subprocess.run(
@@ -71,9 +77,22 @@ class IwScanBackend(ScanBackend):
         except subprocess.TimeoutExpired as exc:
             raise BackendError(f"iw backend: scan timed out after {timeout}s") from exc
         if proc.returncode != 0:
+            err = proc.stderr.strip()
+            hint = "On most systems this needs root (sudo)."
+            if "Network is down" in err or "-100" in err:
+                hint = (
+                    f"The interface is down. Bring it up first: "
+                    f"'sudo ip link set {iface} up' "
+                    "(it is often left down after 'airmon-ng check kill')."
+                )
+            elif "resource busy" in err.lower() or "-16" in err:
+                hint = (
+                    "The interface is busy. Free it with 'sudo airmon-ng check kill', "
+                    "or pick your external adapter instead of the one serving your connection."
+                )
             raise BackendError(
                 f"iw backend: 'iw dev {iface} scan' failed (exit {proc.returncode}). "
-                f"On most systems this needs root. stderr: {proc.stderr.strip()}"
+                f"{hint} stderr: {err}"
             )
         result = parse_iw_scan(proc.stdout)
         result.meta.update({"backend": self.name, "iface": iface})
