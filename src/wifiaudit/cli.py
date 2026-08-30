@@ -7,8 +7,8 @@ Subcommands:
 * ``discover``      — run stage 1 (offline via ``--input`` or live via ``--live``)
 * ``capture``       — run stage 2 (offline replay via ``--input`` or live via ``--live``)
 * ``crack``         — run stage 3 (dictionary attack on a captured handshake/PMKID)
+* ``report``        — run stage 4 (build an engagement report from the audit log)
 * ``audit-verify``  — recompute and check the audit hash chain
-* ``report``        — placeholder for the final stage
 
 Everything the toolkit raises deliberately is a :class:`WifiAuditError`, so the
 CLI catches that one base type and prints a clean message instead of a traceback.
@@ -31,6 +31,7 @@ from wifiaudit.core.errors import ConfigError, WifiAuditError
 from wifiaudit.core.wordlists import read_wordlist
 from wifiaudit.crack.cracker import Cracker
 from wifiaudit.crack.models import CrackResult
+from wifiaudit.report.reporter import Reporter
 from wifiaudit.wizard import Console, Wizard, run_init, run_menu
 from wifiaudit.discovery.backends import FileBackend, IwScanBackend
 from wifiaudit.discovery.models import ScanResult
@@ -310,6 +311,19 @@ def _cmd_audit_verify(args: argparse.Namespace) -> int:
     return 1
 
 
+def _cmd_report(args: argparse.Namespace) -> int:
+    config = load_config(args.config)
+    report, path = Reporter(config).generate(output_path=args.output, fmt=args.format)
+    sev = report.counts_by_severity()
+    summary = ", ".join(f"{n} {s}" for s, n in sorted(sev.items())) or "no findings"
+    print(f"Report written to {path}")
+    print(
+        f"{len(report.findings)} finding(s) ({summary}); "
+        f"audit chain {'OK' if report.audit_ok else 'FAILED'}."
+    )
+    return 0
+
+
 def _cmd_not_implemented(args: argparse.Namespace) -> int:
     print(f"'{args.command}' is not implemented yet (planned stage).", file=sys.stderr)
     return 2
@@ -386,11 +400,11 @@ def build_parser() -> argparse.ArgumentParser:
     av.add_argument("--config", default="config.toml", help="path to config TOML (default: config.toml)")
     av.set_defaults(func=_cmd_audit_verify)
 
-    for name, helptext in [
-        ("report", "generate an engagement report (planned)"),
-    ]:
-        p = sub.add_parser(name, help=helptext)
-        p.set_defaults(func=_cmd_not_implemented)
+    r = sub.add_parser("report", help="build an engagement report from the audit log (stage 4)")
+    r.add_argument("--config", default="config.toml", help="path to config TOML (default: config.toml)")
+    r.add_argument("--output", help="output file (default: <output.dir>/report.md)")
+    r.add_argument("--format", choices=["md", "json"], default="md", help="report format (default: md)")
+    r.set_defaults(func=_cmd_report)
 
     return parser
 

@@ -29,6 +29,7 @@ captures/
 *.22000
 loot/
 reports/
+output/
 # ...but the bundled sample captures used by the offline quickstart/tests ARE
 # safe, synthetic, and must be tracked.
 !tests/fixtures/**/*.pcap

@@ -10,7 +10,7 @@ It is deliberately structured into four stages:
 | 1. Discovery | `wifiaudit.discovery` | ✅ implemented | Passive enumeration of nearby access points and clients; tags each against your authorized scope. |
 | 2. Capture   | `wifiaudit.capture`  | ✅ implemented | Targeted handshake / PMKID capture for **in-scope** networks; analyzes captures for a usable 4-way handshake or PMKID. |
 | 3. Crack     | `wifiaudit.crack`    | ✅ implemented | Offline dictionary attack against a captured handshake or PMKID (pure-Python WPA/WPA2-PSK). |
-| 4. Report    | `wifiaudit.report`   | 🚧 planned | Evidence-linked findings report. |
+| 4. Report    | `wifiaudit.report`   | ✅ implemented | Evidence-linked findings report built from the tamper-evident audit log. |
 
 Every stage runs behind a mandatory **authorization gate** and writes to a
 **tamper-evident audit log**.
@@ -221,6 +221,23 @@ The bundled sample capture cracks to `Summer2026!`. Notes:
   meant for validation and modest dictionaries. A `hashcat`/`aircrack-ng` handoff
   is a natural future backend behind the same interface.
 
+## Stage 4 — reporting
+
+Build an evidence-linked report from the engagement's **audit log** — the report
+is only as trustworthy as the hash chain it is built from, and it says so:
+
+```bash
+python -m wifiaudit report --config config.toml            # writes output/report.md
+python -m wifiaudit report --config config.toml --format json --output report.json
+```
+
+Recovered passphrases become **HIGH** findings and captured-but-not-cracked
+material becomes **MEDIUM** findings, deduplicated to one per network and citing
+the audit record numbers that evidence them. The report states whether the audit
+chain verified intact, and ends with hardening recommendations. Reporting is
+read-only (it summarizes the trail and doesn't act on any network), so it works
+even after the authorization window has closed.
+
 ## Verifying the audit log
 
 ```bash
@@ -257,7 +274,11 @@ src/wifiaudit/
 │   ├── extract.py         # pull crackable material out of a capture
 │   ├── engine.py          # dictionary search (PMK cached per SSID)
 │   └── cracker.py         # gate + scope refusal + audit (passphrase redacted)
-├── report/                # 🚧 placeholder for the final stage
+├── report/
+│   ├── models.py          # Finding / Report (severity-ranked)
+│   ├── builder.py         # audit records -> findings (pure, unit-tested)
+│   ├── render.py          # Report -> Markdown (pure)
+│   └── reporter.py        # read audit log + verify chain + write report
 └── cli.py                 # argparse entry point
 ```
 

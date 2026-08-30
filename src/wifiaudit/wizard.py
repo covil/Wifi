@@ -480,6 +480,23 @@ def _menu_capture_only(
     )
 
 
+def _menu_report(console: Console, config_path: Path, now=None) -> None:
+    if not config_path.is_file():
+        console.say("\nNo config yet — choose 'Set up' first (option 1).")
+        return
+    from wifiaudit.report.reporter import Reporter
+
+    config = load_config(config_path)
+    report, path = Reporter(config).generate()
+    console.say(f"\nReport written to {path}")
+    sev = report.counts_by_severity()
+    summary = ", ".join(f"{n} {s}" for s, n in sorted(sev.items())) or "no findings"
+    console.say(
+        f"{len(report.findings)} finding(s) ({summary}); "
+        f"audit chain {'OK' if report.audit_ok else 'FAILED'}."
+    )
+
+
 def _menu_verify(console: Console, config_path: Path) -> None:
     if not config_path.is_file():
         console.say("\nNo config yet — choose 'Set up' first (option 1).")
@@ -513,6 +530,7 @@ def run_menu(
         "Run on real WiFi - full: capture + crack (Linux + adapter + sudo)",
         "Capture only - no cracking (Linux + adapter + sudo)",
         "Check the audit log",
+        "Generate a report",
         "Quit",
     ]
     console.say("=== wifiaudit ===")
@@ -533,6 +551,8 @@ def run_menu(
                 _menu_capture_only(console, config_path, now, iface_lister=iface_lister)
             elif choice == 4:
                 _menu_verify(console, config_path)
+            elif choice == 5:
+                _menu_report(console, config_path, now)
             else:
                 console.say("Bye.")
                 return 0

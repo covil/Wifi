@@ -118,7 +118,7 @@ def test_init_declined_authorization_writes_false(tmp_path):
 
 def test_menu_offline_demo_then_quit(tmp_path, fixtures_dir):
     # choose 2 (offline demo), pick target 1 in the wizard, then choose 6 (quit)
-    console = ScriptedConsole(["2", "1", "6"])
+    console = ScriptedConsole(["2", "1", "7"])
     rc = run_menu(console, config_path=tmp_path / "config.toml", now=NOW, fixtures=fixtures_dir)
     assert rc == 0
     assert "Summer2026!" in console.text
@@ -126,11 +126,11 @@ def test_menu_offline_demo_then_quit(tmp_path, fixtures_dir):
 
 
 def test_menu_setup_then_quit(tmp_path, fixtures_dir):
-    # choose 1 (set up), answer init prompts, then choose 5 (quit)
+    # choose 1 (set up), answer init prompts, then choose 7 (quit)
     answers = [
         "1",
         "Op <op@example.com>", "Org", "SOW-1", "2099-12-31", "AuditLab-*", "", "yes",
-        "6",
+        "7",
     ]
     console = ScriptedConsole(answers)
     rc = run_menu(console, config_path=tmp_path / "config.toml", now=NOW, fixtures=fixtures_dir)
@@ -140,7 +140,7 @@ def test_menu_setup_then_quit(tmp_path, fixtures_dir):
 
 def test_menu_verify_without_config_prompts_setup(tmp_path, fixtures_dir):
     # choose 5 (check audit log) with no config, then quit
-    console = ScriptedConsole(["5", "6"])
+    console = ScriptedConsole(["5", "7"])
     rc = run_menu(console, config_path=tmp_path / "missing.toml", now=NOW, fixtures=fixtures_dir)
     assert rc == 0
     assert "Set up" in console.text
@@ -150,10 +150,22 @@ def test_menu_verify_with_config_loads_it(tmp_path, fixtures_dir):
     # choose 5 with a real config present, then quit — exercises load_config.
     cfg = tmp_path / "config.toml"
     _write_config(cfg)
-    console = ScriptedConsole(["5", "6"])
+    console = ScriptedConsole(["5", "7"])
     rc = run_menu(console, config_path=cfg, now=NOW, fixtures=fixtures_dir)
     assert rc == 0
     assert "Audit log" in console.text
+
+
+def test_menu_report_generates_file(tmp_path, fixtures_dir, monkeypatch):
+    # choose 6 (generate report) with a config present, then quit.
+    monkeypatch.chdir(tmp_path)  # report writes to ./output; keep it in tmp
+    cfg = tmp_path / "config.toml"
+    _write_config(cfg)
+    console = ScriptedConsole(["6", "7"])
+    rc = run_menu(console, config_path=cfg, now=NOW, fixtures=fixtures_dir)
+    assert rc == 0
+    assert "Report written to" in console.text
+    assert (tmp_path / "output" / "report.md").is_file()
 
 
 def test_menu_live_cancel_typed_iface_when_none_detected(tmp_path, fixtures_dir):
@@ -162,7 +174,7 @@ def test_menu_live_cancel_typed_iface_when_none_detected(tmp_path, fixtures_dir)
     cfg = tmp_path / "config.toml"
     _write_config(cfg)
     # 3 (live), type iface, method 1 (handshake), deauth? no, type wordlist, decline, quit
-    console = ScriptedConsole(["3", "wlan0", "1", "no", "some-wordlist.txt", "no", "6"])
+    console = ScriptedConsole(["3", "wlan0", "1", "no", "some-wordlist.txt", "no", "7"])
     rc = run_menu(
         console, config_path=cfg, now=NOW, fixtures=fixtures_dir,
         iface_lister=lambda: [], wordlist_lister=lambda: [],
@@ -185,7 +197,7 @@ def test_menu_live_picks_detected_interface(tmp_path, fixtures_dir):
         InterfaceInfo("wlan1", bus="usb", driver="rt2800usb", monitor=True),
     ]
     # 3 (live), 2 (pick USB monitor one), method 1, deauth? no, type wordlist, decline, quit
-    console = ScriptedConsole(["3", "2", "1", "no", "some-wordlist.txt", "no", "6"])
+    console = ScriptedConsole(["3", "2", "1", "no", "some-wordlist.txt", "no", "7"])
     rc = run_menu(
         console, config_path=cfg, now=NOW, fixtures=fixtures_dir,
         iface_lister=lambda: ifaces, wordlist_lister=lambda: [],
@@ -201,7 +213,7 @@ def test_menu_live_picks_detected_wordlist(tmp_path, fixtures_dir):
     cfg = tmp_path / "config.toml"
     _write_config(cfg)
     # 3 (live), iface typed, method 1, deauth? no, 1 (pick first wordlist), decline, quit
-    console = ScriptedConsole(["3", "wlan0", "1", "no", "1", "no", "6"])
+    console = ScriptedConsole(["3", "wlan0", "1", "no", "1", "no", "7"])
     rc = run_menu(
         console, config_path=cfg, now=NOW, fixtures=fixtures_dir,
         iface_lister=lambda: [],
@@ -218,7 +230,7 @@ def test_menu_capture_only_no_wordlist_prompt(tmp_path, fixtures_dir):
     cfg = tmp_path / "config.toml"
     _write_config(cfg)
     # 4 (capture only), iface, method 1 (handshake), deauth? no, decline, quit
-    console = ScriptedConsole(["4", "wlan0", "1", "no", "no", "6"])
+    console = ScriptedConsole(["4", "wlan0", "1", "no", "no", "7"])
     rc = run_menu(
         console, config_path=cfg, now=NOW, fixtures=fixtures_dir,
         iface_lister=lambda: [], wordlist_lister=lambda: ["/usr/share/wordlists/x.txt"],
@@ -241,7 +253,7 @@ def test_menu_capture_only_pmkid_skips_deauth_prompt(tmp_path, fixtures_dir):
         encoding="utf-8",
     )
     # 4 (capture only), iface, method 2 (PMKID), decline, quit
-    console = ScriptedConsole(["4", "wlan0", "2", "no", "6"])
+    console = ScriptedConsole(["4", "wlan0", "2", "no", "7"])
     rc = run_menu(
         console, config_path=cfg, now=NOW, fixtures=fixtures_dir, iface_lister=lambda: [],
     )
