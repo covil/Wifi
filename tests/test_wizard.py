@@ -161,8 +161,8 @@ def test_menu_live_cancel_typed_iface_when_none_detected(tmp_path, fixtures_dir)
     # wordlist, decline "Continue?". Exercises load_config (regression guard).
     cfg = tmp_path / "config.toml"
     _write_config(cfg)
-    # 3 (live), type iface, method 1 (handshake), type wordlist, decline, quit
-    console = ScriptedConsole(["3", "wlan0", "1", "some-wordlist.txt", "no", "6"])
+    # 3 (live), type iface, method 1 (handshake), deauth? no, type wordlist, decline, quit
+    console = ScriptedConsole(["3", "wlan0", "1", "no", "some-wordlist.txt", "no", "6"])
     rc = run_menu(
         console, config_path=cfg, now=NOW, fixtures=fixtures_dir,
         iface_lister=lambda: [], wordlist_lister=lambda: [],
@@ -170,6 +170,7 @@ def test_menu_live_cancel_typed_iface_when_none_detected(tmp_path, fixtures_dir)
     assert rc == 0
     assert "could not auto-detect" in console.text
     assert "How do you want to capture" in console.text
+    assert "ACTIVE transmission" in console.text   # deauth warning shown, no config edit
     assert "Cancelled" in console.text
 
 
@@ -183,8 +184,8 @@ def test_menu_live_picks_detected_interface(tmp_path, fixtures_dir):
         InterfaceInfo("wlan0", bus="pci", driver="iwlwifi", monitor=False),
         InterfaceInfo("wlan1", bus="usb", driver="rt2800usb", monitor=True),
     ]
-    # 3 (live), 2 (pick USB monitor one), method 1, type wordlist, decline, quit
-    console = ScriptedConsole(["3", "2", "1", "some-wordlist.txt", "no", "6"])
+    # 3 (live), 2 (pick USB monitor one), method 1, deauth? no, type wordlist, decline, quit
+    console = ScriptedConsole(["3", "2", "1", "no", "some-wordlist.txt", "no", "6"])
     rc = run_menu(
         console, config_path=cfg, now=NOW, fixtures=fixtures_dir,
         iface_lister=lambda: ifaces, wordlist_lister=lambda: [],
@@ -199,8 +200,8 @@ def test_menu_live_picks_detected_wordlist(tmp_path, fixtures_dir):
     # Wordlists detected -> user picks one from the menu (no typing the path).
     cfg = tmp_path / "config.toml"
     _write_config(cfg)
-    # 3 (live), iface typed, method 1, 1 (pick first wordlist), decline, quit
-    console = ScriptedConsole(["3", "wlan0", "1", "1", "no", "6"])
+    # 3 (live), iface typed, method 1, deauth? no, 1 (pick first wordlist), decline, quit
+    console = ScriptedConsole(["3", "wlan0", "1", "no", "1", "no", "6"])
     rc = run_menu(
         console, config_path=cfg, now=NOW, fixtures=fixtures_dir,
         iface_lister=lambda: [],
@@ -216,8 +217,8 @@ def test_menu_capture_only_no_wordlist_prompt(tmp_path, fixtures_dir):
     # for a wordlist, since nothing is cracked.
     cfg = tmp_path / "config.toml"
     _write_config(cfg)
-    # 4 (capture only), iface, method 1 (handshake), decline, quit
-    console = ScriptedConsole(["4", "wlan0", "1", "no", "6"])
+    # 4 (capture only), iface, method 1 (handshake), deauth? no, decline, quit
+    console = ScriptedConsole(["4", "wlan0", "1", "no", "no", "6"])
     rc = run_menu(
         console, config_path=cfg, now=NOW, fixtures=fixtures_dir,
         iface_lister=lambda: [], wordlist_lister=lambda: ["/usr/share/wordlists/x.txt"],
@@ -246,7 +247,7 @@ def test_menu_capture_only_pmkid_skips_deauth_prompt(tmp_path, fixtures_dir):
     )
     assert rc == 0
     assert "PMKID" in console.text
-    assert "Send deauth" not in console.text   # clientless: never asks about deauth
+    assert "ACTIVE transmission" not in console.text   # clientless: never asks about deauth
     assert "Cancelled" in console.text
 
 

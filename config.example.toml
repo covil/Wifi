@@ -50,10 +50,13 @@ output_dir     = "captures"   # where live capture files are written
 #                   connected device or deauth needed). Writes .pcapng. Best when
 #                   no clients are connected. Requires hcxdumptool installed.
 tool           = "airodump-ng"
-# Deauthentication is an ACTIVE transmission that disrupts clients. It stays off
-# unless you set this true AND pass --deauth. When on, deauth is sent in bounded
-# bursts repeatedly across the capture window to improve handshake odds. Only
-# enable it when your rules of engagement explicitly permit it.
+# Deauthentication is an ACTIVE transmission that disrupts clients. When on, it
+# is sent in bounded bursts repeatedly across the capture window to improve
+# handshake odds. Only use it on networks you are authorized to test.
+#   - Interactive menu: you are asked (with a warning) each run; this flag is not
+#     required there.
+#   - CLI `capture --deauth`: requires this flag to be true (a deliberate,
+#     non-interactive opt-in).
 allow_deauth    = false
 deauth_interval = 8           # seconds between repeated deauth bursts
 

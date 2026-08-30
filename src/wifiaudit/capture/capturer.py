@@ -40,11 +40,20 @@ class Capturer:
         self.allow_deauth = allow_deauth
 
     @classmethod
-    def from_config(cls, config: Config, backend: CaptureBackend, *, now=None) -> "Capturer":
-        """Build a capturer, enforcing the authorization gate first."""
+    def from_config(
+        cls, config: Config, backend: CaptureBackend, *, now=None,
+        allow_deauth: bool | None = None,
+    ) -> "Capturer":
+        """Build a capturer, enforcing the authorization gate first.
+
+        ``allow_deauth`` overrides ``[capture] allow_deauth`` when given — the
+        interactive menu passes ``True`` after an explicit, warned confirmation,
+        so a beta user need not edit the config to enable deauth.
+        """
         auth = require_authorization(config, now=now)
         audit = open_audit(config, operator=auth.operator, reference=auth.reference)
-        return cls(backend, auth, audit, allow_deauth=config.capture.allow_deauth)
+        ad = config.capture.allow_deauth if allow_deauth is None else allow_deauth
+        return cls(backend, auth, audit, allow_deauth=ad)
 
     def run(
         self,

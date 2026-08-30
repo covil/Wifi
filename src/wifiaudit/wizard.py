@@ -98,7 +98,7 @@ class Wizard:
 
     def _capture(self, target: CaptureTarget, *, live: bool, capture_input: str | None,
                  iface: str | None, seconds: int | None, deauth: bool,
-                 tool: str | None = None) -> CaptureResult:
+                 tool: str | None = None, allow_deauth: bool | None = None) -> CaptureResult:
         capturer_backend_iface = iface or self.config.discovery.default_iface
         if live:
             backend = capture_backend(
@@ -107,7 +107,9 @@ class Wizard:
                 deauth_interval=self.config.capture.deauth_interval,
             )
             seconds_v = seconds or self.config.capture.capture_seconds
-            capturer = Capturer.from_config(self.config, backend, now=self.now)
+            capturer = Capturer.from_config(
+                self.config, backend, now=self.now, allow_deauth=allow_deauth
+            )
             if getattr(backend, "self_manages_monitor", False):
                 # e.g. hcxdumptool sets up the interface itself; pre-setting
                 # monitor mode makes it fail on a "shared interface".
@@ -152,6 +154,7 @@ class Wizard:
         deauth: bool = False,
         do_crack: bool = True,
         tool: str | None = None,
+        allow_deauth: bool | None = None,
     ) -> WizardOutcome | None:
         c = self.c
         stages = "3" if do_crack else "2"
@@ -193,6 +196,7 @@ class Wizard:
         capture = self._capture(
             target, live=live, capture_input=capture_input,
             iface=iface, seconds=seconds, deauth=deauth, tool=tool,
+            allow_deauth=allow_deauth,
         )
         s = capture.summary()
         c.say(
@@ -407,10 +411,15 @@ def _choose_interface(console: Console, config, lister) -> str:
     return console.ask("Wireless interface", config.discovery.default_iface)
 
 
-def _ask_deauth(console: Console, config) -> bool:
-    if config.capture.allow_deauth:
-        return console.confirm("Send deauth to speed up capture?", default=False)
-    return False
+def _ask_deauth(console: Console) -> bool:
+    """Ask about deauth with a clear warning. This confirmation IS the gate:
+    a 'yes' authorizes deauth for this run without editing the config."""
+    console.say(
+        "\nDeauth briefly disconnects devices from the AP to force a re-handshake."
+        "\nIt is an ACTIVE transmission - only use it on networks you are"
+        "\nauthorized to test (e.g. your own)."
+    )
+    return console.confirm("Use deauth to speed up capture?", default=False)
 
 
 def _choose_capture_method(console: Console) -> str:
@@ -434,7 +443,7 @@ def _menu_live(
 
     iface = _choose_interface(console, config, iface_lister)
     tool = _choose_capture_method(console)
-    deauth = _ask_deauth(console, config) if tool == "airodump-ng" else False
+    deauth = _ask_deauth(console) if tool == "airodump-ng" else False
     wl = _choose_wordlist(console, config, wordlist_lister or _default_wordlists)
     console.say(
         "\nThis will scan and capture on IN-SCOPE targets only. "
@@ -444,7 +453,7 @@ def _menu_live(
         console.say("Cancelled.")
         return
     Wizard(config, console, now=now).run(
-        live=True, iface=iface, wordlist=wl, deauth=deauth, tool=tool
+        live=True, iface=iface, wordlist=wl, deauth=deauth, tool=tool, allow_deauth=deauth
     )
 
 
@@ -458,7 +467,7 @@ def _menu_capture_only(
 
     iface = _choose_interface(console, config, iface_lister)
     tool = _choose_capture_method(console)
-    deauth = _ask_deauth(console, config) if tool == "airodump-ng" else False
+    deauth = _ask_deauth(console) if tool == "airodump-ng" else False
     console.say(
         "\nThis will capture a handshake/PMKID on IN-SCOPE targets only and then "
         "stop (no cracking). It needs root and a monitor-capable adapter."
@@ -467,7 +476,7 @@ def _menu_capture_only(
         console.say("Cancelled.")
         return
     Wizard(config, console, now=now).run(
-        live=True, iface=iface, deauth=deauth, do_crack=False, tool=tool
+        live=True, iface=iface, deauth=deauth, do_crack=False, tool=tool, allow_deauth=deauth
     )
 
 

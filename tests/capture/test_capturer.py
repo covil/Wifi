@@ -94,6 +94,21 @@ def test_deauth_refused_unless_allowed(config_data):
     assert records[-1]["details"]["reason"] == "deauth_not_allowed"
 
 
+def test_deauth_override_allows_without_config_edit(config_data):
+    # allow_deauth stays false in config, but the interactive override (what the
+    # menu's warned confirmation passes) permits deauth for this run.
+    cfg = Config.from_dict(
+        config_data(
+            scope={"bssids": [AP], "essids": [], "channels": []},
+            capture={"allow_deauth": False},
+        )
+    )
+    backend = FakeBackend(_result_with_handshake())
+    capturer = Capturer.from_config(cfg, backend, now=NOW, allow_deauth=True)
+    capturer.run(CaptureTarget(bssid=AP), deauth=True)
+    assert backend.calls[0]["deauth"] is True
+
+
 def test_deauth_allowed_when_configured(config_data):
     cfg = Config.from_dict(
         config_data(
